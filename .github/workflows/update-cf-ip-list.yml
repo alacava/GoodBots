@@ -3,11 +3,12 @@ name: Generate IP Lists - Upload to CloudFlare
 on:
   push:
     branches:
-     - main
+      - main
     paths:
-      - './all_botsonly.ips'
-      - '!.github/workflows/**'
-      - '!renovate.json'
+      - all_botsonly.ips
+    paths-ignore:
+      - .github/workflows/**
+      - renovate.json
   workflow_dispatch:
 
 jobs:
