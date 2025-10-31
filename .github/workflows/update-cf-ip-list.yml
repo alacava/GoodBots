@@ -1,12 +1,9 @@
 name: Generate IP Lists - Upload to CloudFlare
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - .github/workflows/**
-      - renovate.json
+  schedule:
+    # Runs once a day at 1am
+    - cron: '0 1 * * *'
   workflow_dispatch:
 
 jobs:
