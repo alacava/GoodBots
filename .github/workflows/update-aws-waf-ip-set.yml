@@ -48,45 +48,44 @@ jobs:
           echo "Candidates before validation: $TOTAL"
           [ "$TOTAL" -gt 0 ] || { echo "No candidate IPs found."; exit 1; }
 
-          # Validate and deduplicate; AWS WAF supports IPv4 /0-32 and IPv6 /24-128
-          jq -R '
-            def ipv4: "^([0-9]{1,3}\\.){3}[0-9]{1,3}(/([0-9]|[12][0-9]|3[0-2]))?$";
-            def ipv6_loose: "^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$";
-            def v6_prefix: if test(".*/") then (capture(".*/(?<p>[0-9]+)$").p|tonumber) else null end;
-            def has_zone: test("%");
+          # Use Python's ipaddress module to parse, validate, and normalize.
+          # IPv6 addresses are expanded to full notation (no :: compression) because
+          # AWS WAF rejects compressed IPv6 like 2a03:2880:f223::/48 with
+          # WAFInvalidParameterException. strict=False zeroes out any host bits.
+          python3 - "$STREAM" "$ITEMS" <<'PYEOF'
+          import ipaddress, sys, json
 
-            def valid:
-              if has_zone then false
-              elif test(ipv4) then true
-              elif test(ipv6_loose) then
-                ( (ascii_downcase | v6_prefix) as $p
-                | if $p==null then true          # bare IPv6 → will get /128
-                  elif ($p>=24 and $p<=128) then true
-                  else false
-                  end)
-              else false
-              end;
+          stream_path, out_path = sys.argv[1], sys.argv[2]
+          seen = set()
+          result = []
 
-            def normalize:
-              if test(ipv4) then
-                if contains("/") then . else . + "/32" end
-              else
-                ( ascii_downcase
-                | if contains("/") then . else . + "/128" end)
-              end;
+          with open(stream_path) as f:
+              for line in f:
+                  ip = line.strip()
+                  if not ip:
+                      continue
+                  try:
+                      net = ipaddress.ip_network(ip, strict=False)
+                      if isinstance(net, ipaddress.IPv6Network):
+                          # Fully expand IPv6 to avoid :: notation that AWS WAF rejects
+                          canonical = f"{net.network_address.exploded}/{net.prefixlen}"
+                      else:
+                          canonical = str(net)
+                      if canonical not in seen:
+                          seen.add(canonical)
+                          result.append(canonical)
+                  except ValueError:
+                      pass
 
-            [ inputs
-              | select(length>0)
-              | gsub("\\s+";"")
-              | select(valid)
-              | normalize
-            ] | unique | sort
-          ' < "$STREAM" > "$ITEMS"
+          result.sort()
+          with open(out_path, 'w') as f:
+              json.dump(result, f)
+          PYEOF
 
-          COUNT=$(jq 'length' "$ITEMS")
+          COUNT=$(python3 -c "import json; print(len(json.load(open('$ITEMS'))))")
           echo "Unique valid IPs to upload: $COUNT"
           [ "$COUNT" -gt 0 ] || { echo "No valid IPs produced."; exit 1; }
-          echo "Preview:"; jq '.[0:5]' "$ITEMS"
+          echo "Preview:"; python3 -c "import json; [print(x) for x in json.load(open('$ITEMS'))[:5]]"
           echo "items_json=$ITEMS" >> "$GITHUB_OUTPUT"
 
       # --- (2) Get lock token (required by AWS WAF before every update) ---
