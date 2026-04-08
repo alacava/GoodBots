@@ -19,20 +19,22 @@ The `iplists-botsonly/` lists are automatically synced to a CloudFlare IP List d
 | `CF_LIST_ID` | CloudFlare IP list ID |
 | `CLOUDFLARE_API_TOKEN` | CloudFlare API token with List write access |
 
-### AWS WAF IP Set
+### AWS WAF IP Sets
 
-The `iplists-botsonly/` lists are also synced to an AWS WAF IP Set daily. IPv4 addresses are normalized to CIDR notation (`/32` for bare IPs) and IPv6 addresses to `/128`. Only ranges valid for AWS WAF are included (IPv4 `/0–32`, IPv6 `/24–128`).
+The `iplists-botsonly/` lists are also synced to AWS WAF daily. Because AWS WAF IP sets are typed, IPv4 and IPv6 addresses are written to two separate IP sets. Addresses are normalized to CIDR notation (bare IPs get `/32` or `/128`), and IPv6 is expanded to full notation (no `::` compression) as required by the WAF API.
 
-Configure the following GitHub secrets to enable this:
+Create two IP sets in AWS WAF — one with address version `IPV4` and one with `IPV6` — then configure the following GitHub secrets:
 
 | Secret | Description |
 |--------|-------------|
 | `AWS_ACCESS_KEY_ID` | IAM access key ID |
 | `AWS_SECRET_ACCESS_KEY` | IAM secret access key |
 | `AWS_REGION` | AWS region (use `us-east-1` for CloudFront-scoped WAF) |
-| `AWS_WAF_IP_SET_ID` | IP set UUID from the AWS console |
-| `AWS_WAF_IP_SET_NAME` | IP set name |
 | `AWS_WAF_SCOPE` | `REGIONAL` or `CLOUDFRONT` |
+| `AWS_WAF_IPV4_SET_ID` | IPv4 IP set UUID from the AWS console |
+| `AWS_WAF_IPV4_SET_NAME` | IPv4 IP set name |
+| `AWS_WAF_IPV6_SET_ID` | IPv6 IP set UUID from the AWS console |
+| `AWS_WAF_IPV6_SET_NAME` | IPv6 IP set name |
 
 The IAM user/role needs the following permissions:
 
@@ -43,7 +45,7 @@ The IAM user/role needs the following permissions:
     "wafv2:GetIPSet",
     "wafv2:UpdateIPSet"
   ],
-  "Resource": "arn:aws:wafv2:REGION:ACCOUNT_ID:*/ipset/NAME/ID"
+  "Resource": "arn:aws:wafv2:REGION:ACCOUNT_ID:*/ipset/*"
 }
 ```
 
